@@ -11,11 +11,18 @@ export interface Schedule {
 
 export interface Proposal {
   id: number;
-  owner: 'Klas' | 'Jennifer';
   is_active: boolean | number; // SQLite returns 0/1
-  is_sent: boolean | number; // SQLite returns 0/1 - has been sent to other parent
   schedule_data: string; // JSON string of Schedule[]
+  created_by: string;
+  created_at: string;
   updated_at: string;
+}
+
+export interface ProposalComment {
+  id: number;
+  author: string;
+  comment: string;
+  created_at: string;
 }
 
 export interface DayInfo {
@@ -25,4 +32,4 @@ export interface DayInfo {
   isCurrentMonth: boolean;
 }
 
-export type ViewMode = 'confirmed' | 'klas' | 'jennifer';
+export type ViewMode = 'confirmed' | 'proposal';

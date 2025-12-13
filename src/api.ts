@@ -1,4 +1,4 @@
-import type { DayInfo, Proposal, Schedule } from './types';
+import type { DayInfo, Proposal, ProposalComment, Schedule } from './types';
 
 // Use production API when running local dev server, relative path when deployed
 const API_BASE = import.meta.env.DEV 
@@ -69,25 +69,27 @@ export async function fetchSchedule(): Promise<Schedule[]> {
   return data.schedule;
 }
 
-export async function fetchProposals(): Promise<Proposal[]> {
-  const res = await fetchWithAuth(`${API_BASE}/proposals`);
+export async function fetchProposal(): Promise<{ proposal: Proposal | null; comments: ProposalComment[] }> {
+  const res = await fetchWithAuth(`${API_BASE}/proposal`);
   const data = await res.json();
   
   if (!res.ok) {
-    throw new Error(data.error || 'Failed to fetch proposals');
+    throw new Error(data.error || 'Failed to fetch proposal');
   }
   
-  return data.proposals;
+  return { proposal: data.proposal, comments: data.comments };
 }
 
 export async function updateProposal(
-  owner: 'Klas' | 'Jennifer',
-  action: 'activate' | 'deactivate' | 'update_schedule' | 'copy_from_confirmed' | 'copy_from_other' | 'send' | 'respond' | 'accept',
-  schedule_data?: Array<{ switch_date: string; parent_after: string }>
+  action: 'create' | 'update_schedule' | 'add_comment' | 'accept' | 'delete',
+  options?: {
+    schedule_data?: Array<{ switch_date: string; parent_after: string }>;
+    comment?: string;
+  }
 ) {
-  const res = await fetchWithAuth(`${API_BASE}/proposals`, {
+  const res = await fetchWithAuth(`${API_BASE}/proposal`, {
     method: 'PUT',
-    body: JSON.stringify({ owner, action, schedule_data }),
+    body: JSON.stringify({ action, ...options }),
   });
   const data = await res.json();
   

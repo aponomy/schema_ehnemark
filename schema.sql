@@ -20,19 +20,23 @@ CREATE TABLE IF NOT EXISTS schedule (
   UNIQUE(switch_date)
 );
 
--- Proposals table - exactly two rows: one for Klas, one for Jennifer
-CREATE TABLE IF NOT EXISTS proposals (
+-- Proposal table - single shared proposal (only one row ever exists when active)
+CREATE TABLE IF NOT EXISTS proposal (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner TEXT UNIQUE NOT NULL,
   is_active INTEGER DEFAULT 0,
-  is_sent INTEGER DEFAULT 0,
   schedule_data TEXT,
+  created_by TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert the two permanent proposals
-INSERT OR IGNORE INTO proposals (owner, is_active, is_sent, schedule_data) VALUES ('Klas', 0, 0, NULL);
-INSERT OR IGNORE INTO proposals (owner, is_active, is_sent, schedule_data) VALUES ('Jennifer', 0, 0, NULL);
+-- Comments table - conversation about the proposal
+CREATE TABLE IF NOT EXISTS proposal_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  author TEXT NOT NULL,
+  comment TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Insert initial schedule data (weekly alternating starting Dec 15)
 INSERT OR IGNORE INTO schedule (switch_date, parent_after) VALUES ('2025-12-15', 'Jennifer');
