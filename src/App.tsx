@@ -355,7 +355,7 @@ function App() {
               <Box sx={{ mt: 1, p: 1, bgcolor: 'warning.softBg', borderRadius: 'sm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                 <Typography level="body-xs" sx={{ color: 'warning.plainColor' }}>
                   {proposal?.last_updated_by === user.username 
-                    ? (hasLocalChanges ? 'Du har gjort ändringar' : `Skickat till ${user.username === 'Klas' ? 'Jennifer' : 'Klas'}`)
+                    ? `Skickat till ${user.username === 'Klas' ? 'Jennifer' : 'Klas'}`
                     : (hasLocalChanges ? 'Du har gjort ändringar' : `${proposal?.last_updated_by} har föreslagit ändringar`)
                   }
                 </Typography>
@@ -369,10 +369,10 @@ function App() {
                       <MenuItem onClick={handleDeleteProposal} color="danger"><ListItemDecorator>🗑️</ListItemDecorator>Ta bort förslag</MenuItem>
                     </Menu>
                   </Dropdown>
-                  {hasLocalChanges ? (
+                  {proposal?.last_updated_by === user.username ? (
                     <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
-                  ) : proposal?.last_updated_by === user.username ? (
-                    <Typography level="body-xs" sx={{ color: 'warning.plainColor', fontStyle: 'italic' }}>Väntar på svar...</Typography>
+                  ) : hasLocalChanges ? (
+                    <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
                   ) : (
                     <Button size="sm" variant="solid" color="success" onClick={() => setAcceptModalOpen(true)} sx={{ fontSize: '0.75rem' }}>Bekräfta</Button>
                   )}
