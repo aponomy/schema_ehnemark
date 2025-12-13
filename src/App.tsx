@@ -61,6 +61,7 @@ function App() {
   const [newComment, setNewComment] = useState('');
   const [acceptModalOpen, setAcceptModalOpen] = useState(false);
   const [stats, setStats] = useState({ jenniferPercent: 0, klasPercent: 0 });
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -81,6 +82,7 @@ function App() {
       setSchedule(scheduleData);
       setProposal(proposalData.proposal);
       setComments(proposalData.comments);
+      setHasLocalChanges(false); // Reset when loading fresh data
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -164,7 +166,9 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('update_schedule', { schedule_data: newData });
+      setHasLocalChanges(true); // User made a change
       await loadData();
+      setHasLocalChanges(true); // Keep it true after reload
     } catch (error) {
       console.error('Failed to move switch:', error);
       setSaving(false);
@@ -192,7 +196,9 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('update_schedule', { schedule_data: newData });
+      setHasLocalChanges(true); // User made a change
       await loadData();
+      setHasLocalChanges(true); // Keep it true after reload
     } catch (error) {
       console.error('Failed to update schedule:', error);
       setSaving(false);
@@ -210,7 +216,9 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('update_schedule', { schedule_data: newData });
+      setHasLocalChanges(true); // User made a change
       await loadData();
+      setHasLocalChanges(true); // Keep it true after reload
     } catch (error) {
       console.error('Failed to remove switch:', error);
       setSaving(false);
@@ -248,6 +256,7 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('suggest');
+      setHasLocalChanges(false); // Reset after sending
       await loadData();
     } catch (error) {
       console.error('Failed to suggest proposal:', error);
@@ -346,8 +355,8 @@ function App() {
               <Box sx={{ mt: 1, p: 1, bgcolor: 'warning.softBg', borderRadius: 'sm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                 <Typography level="body-xs" sx={{ color: 'warning.plainColor' }}>
                   {proposal?.last_updated_by === user.username 
-                    ? `Skickat till ${user.username === 'Klas' ? 'Jennifer' : 'Klas'}`
-                    : `${proposal?.last_updated_by} har föreslagit ändringar`
+                    ? (hasLocalChanges ? 'Du har gjort ändringar' : `Skickat till ${user.username === 'Klas' ? 'Jennifer' : 'Klas'}`)
+                    : (hasLocalChanges ? 'Du har gjort ändringar' : `${proposal?.last_updated_by} har föreslagit ändringar`)
                   }
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -360,13 +369,12 @@ function App() {
                       <MenuItem onClick={handleDeleteProposal} color="danger"><ListItemDecorator>🗑️</ListItemDecorator>Ta bort förslag</MenuItem>
                     </Menu>
                   </Dropdown>
-                  {proposal?.last_updated_by === user.username ? (
-                    <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Skicka igen</Button>
+                  {hasLocalChanges ? (
+                    <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
+                  ) : proposal?.last_updated_by === user.username ? (
+                    <Typography level="body-xs" sx={{ color: 'warning.plainColor', fontStyle: 'italic' }}>Väntar på svar...</Typography>
                   ) : (
-                    <>
-                      <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
-                      <Button size="sm" variant="solid" color="success" onClick={() => setAcceptModalOpen(true)} sx={{ fontSize: '0.75rem' }}>Bekräfta</Button>
-                    </>
+                    <Button size="sm" variant="solid" color="success" onClick={() => setAcceptModalOpen(true)} sx={{ fontSize: '0.75rem' }}>Bekräfta</Button>
                   )}
                 </Box>
               </Box>
