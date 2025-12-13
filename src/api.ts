@@ -81,7 +81,7 @@ export async function fetchProposal(): Promise<{ proposal: Proposal | null; comm
 }
 
 export async function updateProposal(
-  action: 'create' | 'update_schedule' | 'add_comment' | 'accept' | 'delete',
+  action: 'create' | 'update_schedule' | 'add_comment' | 'suggest' | 'accept' | 'delete',
   options?: {
     schedule_data?: Array<{ switch_date: string; parent_after: string }>;
     comment?: string;

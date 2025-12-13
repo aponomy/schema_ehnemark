@@ -6,6 +6,7 @@ interface Proposal {
   is_active: number;
   schedule_data: string | null;
   created_by: string;
+  last_updated_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -82,7 +83,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   
   try {
     const body = await request.json() as {
-      action: 'create' | 'update_schedule' | 'add_comment' | 'accept' | 'delete';
+      action: 'create' | 'update_schedule' | 'add_comment' | 'suggest' | 'accept' | 'delete';
       schedule_data?: Array<{ switch_date: string; parent_after: string }>;
       comment?: string;
     };
@@ -110,14 +111,12 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
         
         // Create new proposal
         await env.DB.prepare(
-          `INSERT INTO proposal (is_active, schedule_data, created_by, created_at, updated_at) 
-           VALUES (1, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-        ).bind(JSON.stringify(schedule.results), user.username).run();
-        
+          `INSERT INTO proposal (is_active, schedule_data, created_by, last_updated_by, created_at, updated_at) 
+           VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        ).bind(JSON.stringify(schedule.results), user.username, user.username).run();
+
         // Clear any old comments
-        await env.DB.prepare('DELETE FROM proposal_comments').run();
-        
-        break;
+        await env.DB.prepare('DELETE FROM proposal_comments').run();        break;
       }
       
       case 'update_schedule': {
@@ -129,8 +128,16 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
         }
         
         await env.DB.prepare(
-          `UPDATE proposal SET schedule_data = ?, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
-        ).bind(JSON.stringify(body.schedule_data)).run();
+          `UPDATE proposal SET schedule_data = ?, last_updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
+        ).bind(JSON.stringify(body.schedule_data), user.username).run();
+        break;
+      }
+      
+      case 'suggest': {
+        // Mark that the current user is suggesting/sending the proposal to the other user
+        await env.DB.prepare(
+          `UPDATE proposal SET last_updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
+        ).bind(user.username).run();
         break;
       }
       
@@ -149,14 +156,22 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       }
       
       case 'accept': {
-        // Get the proposal's schedule
+        // Get the proposal
         const proposal = await env.DB.prepare(
-          'SELECT schedule_data FROM proposal WHERE is_active = 1'
+          'SELECT schedule_data, last_updated_by FROM proposal WHERE is_active = 1'
         ).first<Proposal>();
         
         if (!proposal?.schedule_data) {
           return new Response(JSON.stringify({ error: 'No active proposal' }), {
             status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Only the OTHER user can accept (not the one who last updated)
+        if (proposal.last_updated_by === user.username) {
+          return new Response(JSON.stringify({ error: 'You cannot accept your own proposal. The other parent must accept.' }), {
+            status: 403,
             headers: { 'Content-Type': 'application/json' }
           });
         }

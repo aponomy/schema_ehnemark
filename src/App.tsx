@@ -244,6 +244,17 @@ function App() {
     }
   };
 
+  const handleSuggestProposal = async () => {
+    setSaving(true);
+    try {
+      await updateProposal('suggest');
+      await loadData();
+    } catch (error) {
+      console.error('Failed to suggest proposal:', error);
+      setSaving(false);
+    }
+  };
+
   const handleAcceptProposal = async () => {
     setSaving(true);
     try {
@@ -332,8 +343,13 @@ function App() {
               </Box>
             </Box>
             {viewMode === 'proposal' && hasProposal && (
-              <Box sx={{ mt: 1, p: 1, bgcolor: 'warning.softBg', borderRadius: 'sm', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography level="body-xs" sx={{ color: 'warning.plainColor' }}>Förslag (skapad av {proposal?.created_by})</Typography>
+              <Box sx={{ mt: 1, p: 1, bgcolor: 'warning.softBg', borderRadius: 'sm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Typography level="body-xs" sx={{ color: 'warning.plainColor' }}>
+                  {proposal?.last_updated_by === user.username 
+                    ? `Väntar på svar från ${proposal?.last_updated_by === 'Klas' ? 'Jennifer' : 'Klas'}`
+                    : `${proposal?.last_updated_by} har föreslagit ändringar`
+                  }
+                </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <IconButton size="sm" variant="outlined" onClick={() => setHelpOpen(true)} sx={{ color: 'warning.plainColor', borderColor: 'warning.plainColor', minWidth: 24, minHeight: 24, width: 24, height: 24, borderRadius: '50%', fontSize: '0.75rem', fontWeight: 'bold' }}>?</IconButton>
                   <Button size="sm" variant="outlined" onClick={() => setCommentsOpen(true)} sx={{ fontSize: '0.75rem', color: 'warning.plainColor', borderColor: 'warning.plainColor' }}>Kommentarer {comments.length > 0 && '(' + comments.length + ')'}</Button>
@@ -344,7 +360,14 @@ function App() {
                       <MenuItem onClick={handleDeleteProposal} color="danger"><ListItemDecorator>🗑️</ListItemDecorator>Ta bort förslag</MenuItem>
                     </Menu>
                   </Dropdown>
-                  <Button size="sm" variant="solid" color="success" onClick={() => setAcceptModalOpen(true)} sx={{ fontSize: '0.75rem' }}>Godkänn</Button>
+                  {proposal?.last_updated_by === user.username ? (
+                    <Button size="sm" variant="solid" color="primary" disabled sx={{ fontSize: '0.75rem' }}>Väntar...</Button>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
+                      <Button size="sm" variant="solid" color="success" onClick={() => setAcceptModalOpen(true)} sx={{ fontSize: '0.75rem' }}>Bekräfta</Button>
+                    </>
+                  )}
                 </Box>
               </Box>
             )}

@@ -14,6 +14,7 @@ export interface Proposal {
   is_active: boolean | number; // SQLite returns 0/1
   schedule_data: string; // JSON string of Schedule[]
   created_by: string;
+  last_updated_by: string;
   created_at: string;
   updated_at: string;
 }

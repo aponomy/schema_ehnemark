@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS proposal (
   is_active INTEGER DEFAULT 0,
   schedule_data TEXT,
   created_by TEXT NOT NULL,
+  last_updated_by TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
