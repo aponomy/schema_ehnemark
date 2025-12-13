@@ -346,7 +346,7 @@ function App() {
               <Box sx={{ mt: 1, p: 1, bgcolor: 'warning.softBg', borderRadius: 'sm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
                 <Typography level="body-xs" sx={{ color: 'warning.plainColor' }}>
                   {proposal?.last_updated_by === user.username 
-                    ? `Väntar på svar från ${proposal?.last_updated_by === 'Klas' ? 'Jennifer' : 'Klas'}`
+                    ? `Skickat till ${user.username === 'Klas' ? 'Jennifer' : 'Klas'}`
                     : `${proposal?.last_updated_by} har föreslagit ändringar`
                   }
                 </Typography>
@@ -361,7 +361,7 @@ function App() {
                     </Menu>
                   </Dropdown>
                   {proposal?.last_updated_by === user.username ? (
-                    <Button size="sm" variant="solid" color="primary" disabled sx={{ fontSize: '0.75rem' }}>Väntar...</Button>
+                    <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Skicka igen</Button>
                   ) : (
                     <>
                       <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
