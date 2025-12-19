@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS proposal_comments;
 DROP TABLE IF EXISTS change_items;
 DROP TABLE IF EXISTS change_proposals;
 DROP TABLE IF EXISTS proposals;
+DROP TABLE IF EXISTS proposal;
 DROP TABLE IF EXISTS schedule;
 DROP TABLE IF EXISTS users;
 
@@ -28,18 +29,37 @@ CREATE TABLE IF NOT EXISTS schedule (
   UNIQUE(switch_date)
 );
 
--- Proposals table - exactly two rows: one for Klas, one for Jennifer
-CREATE TABLE IF NOT EXISTS proposals (
+-- Proposal table - single shared proposal with dual acceptance tracking
+CREATE TABLE IF NOT EXISTS proposal (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  owner TEXT UNIQUE NOT NULL,
   is_active INTEGER DEFAULT 0,
   schedule_data TEXT,
+  day_comments TEXT,
+  created_by TEXT NOT NULL,
+  last_updated_by TEXT,
+  jennifer_accepted INTEGER DEFAULT 0,
+  klas_accepted INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert the two permanent proposals
-INSERT INTO proposals (owner, is_active, schedule_data) VALUES ('Klas', 0, NULL);
-INSERT INTO proposals (owner, is_active, schedule_data) VALUES ('Jennifer', 0, NULL);
+-- Day comments table - stores confirmed day comments
+CREATE TABLE IF NOT EXISTS day_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  comment_date DATE NOT NULL,
+  comment TEXT NOT NULL,
+  author TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(comment_date)
+);
+
+-- Comments table - conversation about the proposal
+CREATE TABLE IF NOT EXISTS proposal_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  author TEXT NOT NULL,
+  comment TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Insert initial schedule data (weekly alternating starting Dec 15)
 INSERT INTO schedule (switch_date, parent_after) VALUES ('2025-12-15', 'Jennifer');

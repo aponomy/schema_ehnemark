@@ -1,34 +1,31 @@
 import {
-  Box,
-  Button,
-  CircularProgress,
-  Container,
-  Dropdown,
-  IconButton,
-  ListItemDecorator,
-  Menu,
-  MenuButton,
-  MenuItem,
-  Modal,
-  ModalClose,
-  ModalDialog,
-  Sheet,
-  Textarea,
-  Typography,
+    Box,
+    Button,
+    Chip,
+    CircularProgress,
+    Container,
+    Divider,
+    IconButton,
+    Modal,
+    ModalClose,
+    ModalDialog,
+    Sheet,
+    Textarea,
+    Typography,
 } from '@mui/joy';
 import CssBaseline from '@mui/joy/CssBaseline';
 import { CssVarsProvider, extendTheme } from '@mui/joy/styles';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  clearToken,
-  fetchProposal,
-  fetchSchedule,
-  formatDate,
-  getStoredUser,
-  updateProposal,
+    clearToken,
+    fetchProposal,
+    fetchSchedule,
+    formatDate,
+    getStoredUser,
+    updateProposal,
 } from './api';
 import { LoginForm, YearCalendar } from './components';
-import type { DayInfo, Proposal, ProposalComment, Schedule, User, ViewMode } from './types';
+import type { DayComment, DayInfo, Proposal, ProposalComment, Schedule, User, ViewMode } from './types';
 
 const theme = extendTheme({
   colorSchemes: {
@@ -46,6 +43,7 @@ const theme = extendTheme({
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [schedule, setSchedule] = useState<Schedule[]>([]);
+  const [dayComments, setDayComments] = useState<DayComment[]>([]);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [comments, setComments] = useState<ProposalComment[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('confirmed');
@@ -57,11 +55,10 @@ function App() {
   const [draggedDate, setDraggedDate] = useState<Date | null>(null);
   const [, setDraggedDayInfo] = useState<DayInfo | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false);
   const [newComment, setNewComment] = useState('');
-  const [acceptModalOpen, setAcceptModalOpen] = useState(false);
+  const [newDayComment, setNewDayComment] = useState('');
+  const [showDayCommentInput, setShowDayCommentInput] = useState(false);
   const [stats, setStats] = useState({ jenniferPercent: 0, klasPercent: 0 });
-  const [hasLocalChanges, setHasLocalChanges] = useState(false);
 
   useEffect(() => {
     const storedUser = getStoredUser();
@@ -79,10 +76,10 @@ function App() {
         fetchSchedule(),
         fetchProposal(),
       ]);
-      setSchedule(scheduleData);
+      setSchedule(scheduleData.schedule);
+      setDayComments(scheduleData.dayComments);
       setProposal(proposalData.proposal);
       setComments(proposalData.comments);
-      setHasLocalChanges(false); // Reset when loading fresh data
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -166,9 +163,7 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('update_schedule', { schedule_data: newData });
-      setHasLocalChanges(true); // User made a change
       await loadData();
-      setHasLocalChanges(true); // Keep it true after reload
     } catch (error) {
       console.error('Failed to move switch:', error);
       setSaving(false);
@@ -196,9 +191,7 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('update_schedule', { schedule_data: newData });
-      setHasLocalChanges(true); // User made a change
       await loadData();
-      setHasLocalChanges(true); // Keep it true after reload
     } catch (error) {
       console.error('Failed to update schedule:', error);
       setSaving(false);
@@ -216,9 +209,7 @@ function App() {
     setSaving(true);
     try {
       await updateProposal('update_schedule', { schedule_data: newData });
-      setHasLocalChanges(true); // User made a change
       await loadData();
-      setHasLocalChanges(true); // Keep it true after reload
     } catch (error) {
       console.error('Failed to remove switch:', error);
       setSaving(false);
@@ -252,25 +243,11 @@ function App() {
     }
   };
 
-  const handleSuggestProposal = async () => {
-    setSaving(true);
-    try {
-      await updateProposal('suggest');
-      setHasLocalChanges(false); // Reset after sending
-      await loadData();
-    } catch (error) {
-      console.error('Failed to suggest proposal:', error);
-      setSaving(false);
-    }
-  };
-
   const handleAcceptProposal = async () => {
     setSaving(true);
     try {
       await updateProposal('accept');
       await loadData();
-      setViewMode('confirmed');
-      setAcceptModalOpen(false);
     } catch (error) {
       console.error('Failed to accept proposal:', error);
       setSaving(false);
@@ -290,16 +267,116 @@ function App() {
     }
   };
 
-  const handleResetToConfirmed = async () => {
-    const scheduleData = schedule.map(s => ({ switch_date: s.switch_date, parent_after: s.parent_after }));
+  // Get day comments for the current view
+  const getDisplayDayComments = (): DayComment[] => {
+    if (viewMode === 'confirmed') return dayComments;
+    if (proposal?.day_comments) {
+      try {
+        return JSON.parse(proposal.day_comments);
+      } catch {
+        return dayComments;
+      }
+    }
+    return dayComments;
+  };
+
+  const getProposalDayComments = (): DayComment[] => {
+    if (proposal?.day_comments) {
+      try {
+        return JSON.parse(proposal.day_comments);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  // Get comment for selected date
+  const getSelectedDayComment = (): DayComment | null => {
+    if (!selectedDate) return null;
+    const dateStr = formatDate(selectedDate);
+    const comments = getDisplayDayComments();
+    return comments.find(c => c.date === dateStr) || null;
+  };
+
+  const handleAddDayComment = async () => {
+    if (!selectedDate || !canEdit() || !newDayComment.trim() || !user) return;
+    const dateStr = formatDate(selectedDate);
+    const currentComments = getProposalDayComments();
+    const newComments = [...currentComments.filter(c => c.date !== dateStr), {
+      date: dateStr,
+      comment: newDayComment.trim(),
+      author: user.username
+    }];
     setSaving(true);
     try {
-      await updateProposal('update_schedule', { schedule_data: scheduleData });
+      await updateProposal('update_day_comments', { day_comments: newComments });
+      setNewDayComment('');
+      setShowDayCommentInput(false);
       await loadData();
     } catch (error) {
-      console.error('Failed to reset:', error);
+      console.error('Failed to add day comment:', error);
       setSaving(false);
     }
+  };
+
+  const handleRemoveDayComment = async () => {
+    if (!selectedDate || !canEdit()) return;
+    const dateStr = formatDate(selectedDate);
+    const currentComments = getProposalDayComments();
+    const newComments = currentComments.filter(c => c.date !== dateStr);
+    setSaving(true);
+    try {
+      await updateProposal('update_day_comments', { day_comments: newComments });
+      setShowDayCommentInput(false);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to remove day comment:', error);
+      setSaving(false);
+    }
+  };
+
+  const hasUserAccepted = () => {
+    if (!proposal || !user) return false;
+    return user.username === 'Jennifer' ? !!proposal.jennifer_accepted : !!proposal.klas_accepted;
+  };
+
+  const hasOtherAccepted = () => {
+    if (!proposal || !user) return false;
+    return user.username === 'Jennifer' ? !!proposal.klas_accepted : !!proposal.jennifer_accepted;
+  };
+
+  const getOtherUsername = () => {
+    return user?.username === 'Jennifer' ? 'Klas' : 'Jennifer';
+  };
+
+  // Check if the other person was the last to update (for badge indicator)
+  const hasNewFromOther = () => {
+    if (!proposal || !user) return false;
+    return proposal.last_updated_by !== user.username;
+  };
+
+  // Get a descriptive status message for the proposal
+  const getProposalStatusMessage = () => {
+    if (!proposal || !user) return '';
+    const other = getOtherUsername();
+    const userAccepted = hasUserAccepted();
+    const otherAccepted = hasOtherAccepted();
+    
+    if (userAccepted && otherAccepted) {
+      return 'Båda har godkänt – schemat uppdateras...';
+    }
+    if (userAccepted && !otherAccepted) {
+      return `Du har godkänt. När ${other} också godkänner ersätts Bekräftat schema.`;
+    }
+    if (!userAccepted && otherAccepted) {
+      return `${other} har godkänt. Godkänn du också för att ersätta Bekräftat schema.`;
+    }
+    // Neither has accepted
+    if (proposal.last_updated_by === user.username) {
+      return `Du gjorde senaste ändringen. Båda måste godkänna för att ersätta Bekräftat schema.`;
+    }
+    return `${other} har gjort ändringar. Båda måste godkänna för att ersätta Bekräftat schema.`;
   };
 
   if (loading) {
@@ -338,63 +415,134 @@ function App() {
                 {saving && <CircularProgress size="sm" sx={{ '--CircularProgress-size': '16px' }} />}
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, md: 1 } }}>
-                <Button size="sm" variant={viewMode === 'confirmed' ? 'solid' : 'plain'} onClick={() => setViewMode('confirmed')} sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}>Bestämt</Button>
-                {hasProposal && (
-                  <Button size="sm" variant={viewMode === 'proposal' ? 'solid' : 'plain'} onClick={() => setViewMode('proposal')} sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}>
-                    Förslag {comments.length > 0 && <Box component="span" sx={{ ml: 0.5, bgcolor: 'primary.500', color: 'white', borderRadius: '50%', width: 16, height: 16, fontSize: '0.65rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{comments.length}</Box>}
+                <Button size="sm" variant={viewMode === 'confirmed' ? 'solid' : 'plain'} onClick={() => setViewMode('confirmed')} sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}>Bekräftat</Button>
+                {hasProposal ? (
+                  <Button 
+                    size="sm" 
+                    variant={viewMode === 'proposal' ? 'solid' : 'plain'} 
+                    color="warning" 
+                    onClick={() => setViewMode('proposal')} 
+                    sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' }, position: 'relative' }}
+                  >
+                    Förslag
+                    {hasNewFromOther() && viewMode !== 'proposal' && (
+                      <Box 
+                        sx={{ 
+                          position: 'absolute', 
+                          top: -4, 
+                          right: -4, 
+                          width: 10, 
+                          height: 10, 
+                          borderRadius: '50%', 
+                          bgcolor: 'danger.500',
+                          border: '2px solid',
+                          borderColor: 'background.surface'
+                        }} 
+                      />
+                    )}
                   </Button>
+                ) : (
+                  <Button size="sm" variant="soft" color="warning" onClick={handleCreateProposal} sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}>Skapa Förslag</Button>
                 )}
-                {!hasProposal && <Button size="sm" variant="soft" onClick={handleCreateProposal}>Skapa Förslag</Button>}
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Typography level="body-sm" sx={{ display: { xs: 'none', sm: 'block' } }}>{user.username}</Typography>
                 <Button variant="plain" size="sm" onClick={handleLogout}>Logga ut</Button>
               </Box>
             </Box>
-            {viewMode === 'proposal' && hasProposal && (
-              <Box sx={{ mt: 1, p: 1, bgcolor: 'warning.softBg', borderRadius: 'sm', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                <Typography level="body-xs" sx={{ color: 'warning.plainColor' }}>
-                  {proposal?.last_updated_by === user.username 
-                    ? `Skickat till ${user.username === 'Klas' ? 'Jennifer' : 'Klas'}`
-                    : (hasLocalChanges ? 'Du har gjort ändringar' : `${proposal?.last_updated_by} har föreslagit ändringar`)
-                  }
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <IconButton size="sm" variant="outlined" onClick={() => setHelpOpen(true)} sx={{ color: 'warning.plainColor', borderColor: 'warning.plainColor', minWidth: 24, minHeight: 24, width: 24, height: 24, borderRadius: '50%', fontSize: '0.75rem', fontWeight: 'bold' }}>?</IconButton>
-                  <Button size="sm" variant="outlined" onClick={() => setCommentsOpen(true)} sx={{ fontSize: '0.75rem', color: 'warning.plainColor', borderColor: 'warning.plainColor' }}>Kommentarer {comments.length > 0 && '(' + comments.length + ')'}</Button>
-                  <Dropdown>
-                    <MenuButton size="sm" variant="outlined" sx={{ color: 'warning.plainColor', borderColor: 'warning.plainColor', fontSize: '0.75rem' }}>Åtgärder...</MenuButton>
-                    <Menu placement="bottom-end" size="sm">
-                      <MenuItem onClick={handleResetToConfirmed}><ListItemDecorator>🔄</ListItemDecorator>Återställ till Bestämt</MenuItem>
-                      <MenuItem onClick={handleDeleteProposal} color="danger"><ListItemDecorator>🗑️</ListItemDecorator>Ta bort förslag</MenuItem>
-                    </Menu>
-                  </Dropdown>
-                  {proposal?.last_updated_by === user.username ? (
-                    <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
-                  ) : hasLocalChanges ? (
-                    <Button size="sm" variant="solid" color="warning" onClick={handleSuggestProposal} sx={{ fontSize: '0.75rem' }}>Föreslå</Button>
-                  ) : (
-                    <Button size="sm" variant="solid" color="success" onClick={() => setAcceptModalOpen(true)} sx={{ fontSize: '0.75rem' }}>Bekräfta</Button>
-                  )}
-                </Box>
-              </Box>
-            )}
           </Container>
         </Sheet>
+
         <Box component="main" sx={{ flex: 1, py: { xs: 1, md: 3 } }}>
           <Container maxWidth="md">
-            <YearCalendar schedule={displaySchedule} isEditable={isEditing} onDateClick={handleDateClick} draggedDate={draggedDate} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDrop={handleDrop} onStatsCalculated={setStats} />
+            {viewMode === 'proposal' && hasProposal && (
+              <Sheet sx={{ mb: 2, p: 2, borderRadius: 'md', bgcolor: 'warning.softBg' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography level="title-sm" sx={{ color: 'warning.plainColor' }}>Förslag på ändringar</Typography>
+                    <IconButton size="sm" variant="outlined" onClick={() => setHelpOpen(true)} sx={{ color: 'warning.plainColor', borderColor: 'warning.plainColor', minWidth: 20, minHeight: 20, width: 20, height: 20, borderRadius: '50%', fontSize: '0.65rem' }}>?</IconButton>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Chip 
+                      size="sm" 
+                      variant="soft"
+                      sx={{ 
+                        fontSize: '0.7rem',
+                        bgcolor: proposal?.jennifer_accepted ? 'success.softBg' : 'neutral.softBg',
+                        color: proposal?.jennifer_accepted ? 'success.plainColor' : 'neutral.plainColor',
+                      }}
+                    >
+                      Jennifer {proposal?.jennifer_accepted ? '✓' : ''}
+                    </Chip>
+                    <Chip 
+                      size="sm" 
+                      variant="soft"
+                      sx={{ 
+                        fontSize: '0.7rem',
+                        bgcolor: proposal?.klas_accepted ? 'success.softBg' : 'neutral.softBg',
+                        color: proposal?.klas_accepted ? 'success.plainColor' : 'neutral.plainColor',
+                      }}
+                    >
+                      Klas {proposal?.klas_accepted ? '✓' : ''}
+                    </Chip>
+                  </Box>
+                </Box>
+                <Typography level="body-sm" sx={{ mb: 2, color: hasOtherAccepted() && !hasUserAccepted() ? 'success.plainColor' : 'warning.plainColor' }}>
+                  {getProposalStatusMessage()}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Button size="sm" variant="outlined" color="danger" onClick={handleDeleteProposal} sx={{ fontSize: '0.75rem' }}>🗑️ Ta bort förslag</Button>
+                  <Box sx={{ flex: 1 }} />
+                  {!hasUserAccepted() ? (
+                    <Button size="sm" variant="solid" color="success" onClick={handleAcceptProposal} sx={{ fontSize: '0.75rem' }}>✓ Godkänn</Button>
+                  ) : null}
+                </Box>
+              </Sheet>
+            )}
+            <YearCalendar schedule={displaySchedule} isEditable={isEditing} onDateClick={handleDateClick} draggedDate={draggedDate} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDrop={handleDrop} onStatsCalculated={setStats} dayComments={getDisplayDayComments()} />
+            {viewMode === 'proposal' && hasProposal && (
+              <Sheet sx={{ mt: 3, p: 2, borderRadius: 'md' }}>
+                <Typography level="title-sm" sx={{ mb: 2 }}>Kommentarer</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2, maxHeight: '300px', overflow: 'auto' }}>
+                  {comments.length === 0 ? (
+                    <Typography level="body-sm" sx={{ color: 'neutral.500', fontStyle: 'italic' }}>Inga kommentarer ännu.</Typography>
+                  ) : comments.map((c) => (
+                    <Box key={c.id} sx={{ p: 1.5, bgcolor: c.author === user.username ? 'primary.softBg' : 'neutral.softBg', borderRadius: 'sm', borderLeft: '3px solid', borderColor: c.author === 'Jennifer' ? 'rgb(244, 114, 182)' : 'rgb(96, 165, 250)' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography level="body-xs" sx={{ fontWeight: 'bold', color: c.author === 'Jennifer' ? 'rgb(244, 114, 182)' : 'rgb(96, 165, 250)' }}>{c.author}</Typography>
+                        <Typography level="body-xs" sx={{ color: 'neutral.500' }}>{new Date(c.created_at).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</Typography>
+                      </Box>
+                      <Typography level="body-sm">{c.comment}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+                <Divider sx={{ my: 2 }} />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Textarea placeholder="Skriv en kommentar..." value={newComment} onChange={(e) => setNewComment(e.target.value)} minRows={1} maxRows={3} sx={{ flex: 1 }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }} />
+                  <Button onClick={handleAddComment} disabled={!newComment.trim()} sx={{ alignSelf: 'flex-end' }}>Skicka</Button>
+                </Box>
+              </Sheet>
+            )}
           </Container>
         </Box>
+
         <Sheet component="footer" sx={{ p: { xs: 1, md: 2 }, borderTop: '1px solid', borderColor: 'divider' }}>
           <Container maxWidth="md" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography level="body-xs" sx={{ color: 'neutral.500' }}><Box component="span" sx={{ color: 'rgb(244, 114, 182)' }}>Jennifer {stats.jenniferPercent}%</Box> · <Box component="span" sx={{ color: 'rgb(96, 165, 250)' }}>Klas {stats.klasPercent}%</Box></Typography>
             <Typography level="body-xs" sx={{ color: 'neutral.500' }}>© {new Date().getFullYear()} Ehnemark</Typography>
           </Container>
         </Sheet>
-        <Modal open={datePickerOpen} onClose={() => { setDatePickerOpen(false); setSelectedDayInfo(null); }}>
+
+        <Modal open={datePickerOpen} onClose={() => { setDatePickerOpen(false); setSelectedDayInfo(null); setNewDayComment(''); setShowDayCommentInput(false); }}>
           <ModalDialog size="sm">
-            <ModalClose />
+            <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 0.5 }}>
+              {canEdit() && (
+                <IconButton size="sm" variant="plain" color="neutral" onClick={() => { setDatePickerOpen(false); setShowDayCommentInput(true); }} sx={{ opacity: getSelectedDayComment() ? 1 : 0.6, '&:hover': { opacity: 1 } }}>
+                  💬
+                </IconButton>
+              )}
+              <ModalClose sx={{ position: 'static' }} />
+            </Box>
             <Typography level="title-md">{selectedDate?.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' })}</Typography>
             {selectedDate && selectedDayInfo && (
               <Box sx={{ mt: 2 }}>
@@ -417,53 +565,51 @@ function App() {
             )}
           </ModalDialog>
         </Modal>
+
+        <Modal open={showDayCommentInput} onClose={() => { setShowDayCommentInput(false); setNewDayComment(''); }}>
+          <ModalDialog size="sm">
+            <ModalClose />
+            <Typography level="title-md">Dagkommentar</Typography>
+            <Typography level="body-sm" sx={{ color: 'neutral.400' }}>{selectedDate?.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' })}</Typography>
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {getSelectedDayComment() && (
+                <Box sx={{ p: 1.5, bgcolor: 'neutral.softBg', borderRadius: 'sm', borderLeft: '3px solid', borderColor: getSelectedDayComment()?.author === 'Jennifer' ? 'rgb(244, 114, 182)' : 'rgb(96, 165, 250)' }}>
+                  <Typography level="body-xs" sx={{ fontWeight: 'bold', color: getSelectedDayComment()?.author === 'Jennifer' ? 'rgb(244, 114, 182)' : 'rgb(96, 165, 250)', mb: 0.5 }}>{getSelectedDayComment()?.author}</Typography>
+                  <Typography level="body-sm">{getSelectedDayComment()?.comment}</Typography>
+                </Box>
+              )}
+              <Textarea 
+                placeholder={getSelectedDayComment() ? "Ersätt kommentaren..." : "Skriv en kommentar för denna dag..."} 
+                value={newDayComment} 
+                onChange={(e) => setNewDayComment(e.target.value)} 
+                minRows={2} 
+                maxRows={4}
+                autoFocus
+              />
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {getSelectedDayComment() && (
+                  <Button variant="soft" color="danger" size="sm" onClick={handleRemoveDayComment} disabled={saving}>Ta bort</Button>
+                )}
+                <Box sx={{ flex: 1 }} />
+                <Button variant="soft" color="neutral" size="sm" onClick={() => { setShowDayCommentInput(false); setNewDayComment(''); }}>Avbryt</Button>
+                <Button variant="solid" size="sm" onClick={handleAddDayComment} disabled={!newDayComment.trim() || saving}>Spara</Button>
+              </Box>
+            </Box>
+          </ModalDialog>
+        </Modal>
+
         <Modal open={helpOpen} onClose={() => setHelpOpen(false)}>
           <ModalDialog size="md">
             <ModalClose />
-            <Typography level="title-lg" sx={{ mb: 2 }}>Hur man redigerar schemat</Typography>
+            <Typography level="title-lg" sx={{ mb: 2 }}>Hur fungerar det?</Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Flytta en växlingsdag</Typography><Typography level="body-sm">Dra en dag med ring till ett nytt datum.</Typography></Box>
-              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Ta bort en växlingsdag</Typography><Typography level="body-sm">Klicka på en dag med ring och välj Ta bort.</Typography></Box>
-              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Lägg till en växlingsdag</Typography><Typography level="body-sm">Klicka på en vanlig dag för att lägga till en växling.</Typography></Box>
-              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Kommentarer</Typography><Typography level="body-sm">Diskutera ändringar med den andra föräldern.</Typography></Box>
-              <Box><Typography level="title-sm" sx={{ color: 'success.400' }}>Godkänn</Typography><Typography level="body-sm">När ni är överens, klicka Godkänn.</Typography></Box>
+              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Skapa förslag</Typography><Typography level="body-sm">När det inte finns något förslag kan vem som helst skapa ett. Det kopierar det bekräftade schemat.</Typography></Box>
+              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Redigera</Typography><Typography level="body-sm">Båda kan redigera förslaget. Klicka på en dag för att lägga till/ta bort växlingar, eller dra för att flytta.</Typography></Box>
+              <Box><Typography level="title-sm" sx={{ color: 'primary.400' }}>Kommentera</Typography><Typography level="body-sm">Diskutera ändringar via kommentarerna längst ner.</Typography></Box>
+              <Box><Typography level="title-sm" sx={{ color: 'success.400' }}>Godkänn</Typography><Typography level="body-sm">När båda godkänt förslaget ersätter det automatiskt det bekräftade schemat.</Typography></Box>
+              <Box><Typography level="title-sm" sx={{ color: 'warning.400' }}>OBS!</Typography><Typography level="body-sm">Om någon gör en ändring efter att du godkänt, återställs godkännandet och båda måste godkänna igen.</Typography></Box>
             </Box>
             <Button sx={{ mt: 2 }} onClick={() => setHelpOpen(false)}>Stäng</Button>
-          </ModalDialog>
-        </Modal>
-        <Modal open={commentsOpen} onClose={() => setCommentsOpen(false)}>
-          <ModalDialog size="md" sx={{ maxHeight: '80vh', overflow: 'auto' }}>
-            <ModalClose />
-            <Typography level="title-lg" sx={{ mb: 2 }}>Kommentarer</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 2, maxHeight: '40vh', overflow: 'auto' }}>
-              {comments.length === 0 ? (
-                <Typography level="body-sm" sx={{ color: 'neutral.500', fontStyle: 'italic' }}>Inga kommentarer ännu.</Typography>
-              ) : comments.map((c) => (
-                <Box key={c.id} sx={{ p: 1.5, bgcolor: c.author === user.username ? 'primary.softBg' : 'neutral.softBg', borderRadius: 'sm' }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                    <Typography level="body-xs" sx={{ fontWeight: 'bold' }}>{c.author}</Typography>
-                    <Typography level="body-xs" sx={{ color: 'neutral.500' }}>{new Date(c.created_at).toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</Typography>
-                  </Box>
-                  <Typography level="body-sm">{c.comment}</Typography>
-                </Box>
-              ))}
-            </Box>
-            <Textarea placeholder="Skriv en kommentar..." value={newComment} onChange={(e) => setNewComment(e.target.value)} minRows={2} sx={{ mb: 1 }} />
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <Button variant="outlined" onClick={() => setCommentsOpen(false)}>Stäng</Button>
-              <Button onClick={handleAddComment} disabled={!newComment.trim()}>Skicka</Button>
-            </Box>
-          </ModalDialog>
-        </Modal>
-        <Modal open={acceptModalOpen} onClose={() => setAcceptModalOpen(false)}>
-          <ModalDialog size="md">
-            <ModalClose />
-            <Typography level="title-lg" sx={{ mb: 2 }}>Godkänn förslag</Typography>
-            <Typography level="body-md" sx={{ mb: 3 }}>Är du säker? Det kommer att ersätta det bekräftade schemat.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-              <Button variant="outlined" color="neutral" onClick={() => setAcceptModalOpen(false)}>Avbryt</Button>
-              <Button variant="solid" color="success" onClick={handleAcceptProposal}>Ja, godkänn</Button>
-            </Box>
           </ModalDialog>
         </Modal>
       </Box>

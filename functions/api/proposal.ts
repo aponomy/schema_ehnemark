@@ -5,8 +5,11 @@ interface Proposal {
   id: number;
   is_active: number;
   schedule_data: string | null;
+  day_comments: string | null;
   created_by: string;
   last_updated_by: string;
+  jennifer_accepted: number;
+  klas_accepted: number;
   created_at: string;
   updated_at: string;
 }
@@ -83,8 +86,9 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
   
   try {
     const body = await request.json() as {
-      action: 'create' | 'update_schedule' | 'add_comment' | 'suggest' | 'accept' | 'delete';
+      action: 'create' | 'update_schedule' | 'update_day_comments' | 'add_comment' | 'accept' | 'delete';
       schedule_data?: Array<{ switch_date: string; parent_after: string }>;
+      day_comments?: Array<{ date: string; comment: string; author: string }>;
       comment?: string;
     };
     
@@ -108,15 +112,21 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
         const schedule = await env.DB.prepare(
           'SELECT switch_date, parent_after FROM schedule ORDER BY switch_date'
         ).all();
+
+        // Get confirmed day comments as starting point
+        const dayComments = await env.DB.prepare(
+          'SELECT comment_date as date, comment, author FROM day_comments ORDER BY comment_date'
+        ).all();
         
-        // Create new proposal
+        // Create new proposal with both acceptances reset
         await env.DB.prepare(
-          `INSERT INTO proposal (is_active, schedule_data, created_by, last_updated_by, created_at, updated_at) 
-           VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-        ).bind(JSON.stringify(schedule.results), user.username, user.username).run();
+          `INSERT INTO proposal (is_active, schedule_data, day_comments, created_by, last_updated_by, jennifer_accepted, klas_accepted, created_at, updated_at) 
+           VALUES (1, ?, ?, ?, ?, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+        ).bind(JSON.stringify(schedule.results), JSON.stringify(dayComments.results || []), user.username, user.username).run();
 
         // Clear any old comments
-        await env.DB.prepare('DELETE FROM proposal_comments').run();        break;
+        await env.DB.prepare('DELETE FROM proposal_comments').run();
+        break;
       }
       
       case 'update_schedule': {
@@ -127,17 +137,26 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
           });
         }
         
+        // When schedule is updated, reset both acceptances
         await env.DB.prepare(
-          `UPDATE proposal SET schedule_data = ?, last_updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
+          `UPDATE proposal SET schedule_data = ?, last_updated_by = ?, jennifer_accepted = 0, klas_accepted = 0, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
         ).bind(JSON.stringify(body.schedule_data), user.username).run();
         break;
       }
-      
-      case 'suggest': {
-        // Mark that the current user is suggesting/sending the proposal to the other user
+
+      case 'update_day_comments': {
+        if (!body.day_comments) {
+          return new Response(JSON.stringify({ error: 'day_comments required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // When day comments are updated, reset both acceptances
+        const dayCommentsJson = JSON.stringify(body.day_comments);
         await env.DB.prepare(
-          `UPDATE proposal SET last_updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
-        ).bind(user.username).run();
+          `UPDATE proposal SET day_comments = ?, last_updated_by = ?, jennifer_accepted = 0, klas_accepted = 0, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
+        ).bind(dayCommentsJson, user.username).run();
         break;
       }
       
@@ -158,7 +177,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
       case 'accept': {
         // Get the proposal
         const proposal = await env.DB.prepare(
-          'SELECT schedule_data, last_updated_by FROM proposal WHERE is_active = 1'
+          'SELECT schedule_data, day_comments, jennifer_accepted, klas_accepted FROM proposal WHERE is_active = 1'
         ).first<Proposal>();
         
         if (!proposal?.schedule_data) {
@@ -168,33 +187,50 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
           });
         }
         
-        // Only the OTHER user can accept (not the one who last updated)
-        if (proposal.last_updated_by === user.username) {
-          return new Response(JSON.stringify({ error: 'You cannot accept your own proposal. The other parent must accept.' }), {
-            status: 403,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-        
-        const newSchedule = JSON.parse(proposal.schedule_data) as Array<{ switch_date: string; parent_after: string }>;
-        
-        // Delete all existing schedule
-        await env.DB.prepare('DELETE FROM schedule').run();
-        
-        // Insert new schedule
-        for (const entry of newSchedule) {
-          await env.DB.prepare(
-            'INSERT INTO schedule (switch_date, parent_after) VALUES (?, ?)'
-          ).bind(entry.switch_date, entry.parent_after).run();
-        }
-        
-        // Deactivate the proposal
+        // Mark this user as accepted
+        const acceptField = user.username === 'Jennifer' ? 'jennifer_accepted' : 'klas_accepted';
         await env.DB.prepare(
-          `UPDATE proposal SET is_active = 0 WHERE is_active = 1`
+          `UPDATE proposal SET ${acceptField} = 1, updated_at = CURRENT_TIMESTAMP WHERE is_active = 1`
         ).run();
         
-        // Clear comments
-        await env.DB.prepare('DELETE FROM proposal_comments').run();
+        // Check if both have now accepted
+        const updatedProposal = await env.DB.prepare(
+          'SELECT jennifer_accepted, klas_accepted, schedule_data, day_comments FROM proposal WHERE is_active = 1'
+        ).first<Proposal>();
+        
+        if (updatedProposal?.jennifer_accepted && updatedProposal?.klas_accepted) {
+          // Both accepted - apply the proposal to confirmed schedule
+          const newSchedule = JSON.parse(updatedProposal.schedule_data!) as Array<{ switch_date: string; parent_after: string }>;
+          
+          // Delete all existing schedule
+          await env.DB.prepare('DELETE FROM schedule').run();
+          
+          // Insert new schedule
+          for (const entry of newSchedule) {
+            await env.DB.prepare(
+              'INSERT INTO schedule (switch_date, parent_after) VALUES (?, ?)'
+            ).bind(entry.switch_date, entry.parent_after).run();
+          }
+
+          // Apply day comments to confirmed day_comments table
+          await env.DB.prepare('DELETE FROM day_comments').run();
+          if (updatedProposal.day_comments) {
+            const newDayComments = JSON.parse(updatedProposal.day_comments) as Array<{ date: string; comment: string; author: string }>;
+            for (const dc of newDayComments) {
+              await env.DB.prepare(
+                'INSERT INTO day_comments (comment_date, comment, author) VALUES (?, ?, ?)'
+              ).bind(dc.date, dc.comment, dc.author).run();
+            }
+          }
+          
+          // Deactivate the proposal
+          await env.DB.prepare(
+            `UPDATE proposal SET is_active = 0 WHERE is_active = 1`
+          ).run();
+          
+          // Clear comments
+          await env.DB.prepare('DELETE FROM proposal_comments').run();
+        }
         
         break;
       }

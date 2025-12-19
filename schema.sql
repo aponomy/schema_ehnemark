@@ -25,10 +25,23 @@ CREATE TABLE IF NOT EXISTS proposal (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   is_active INTEGER DEFAULT 0,
   schedule_data TEXT,
+  day_comments TEXT,
   created_by TEXT NOT NULL,
   last_updated_by TEXT,
+  jennifer_accepted INTEGER DEFAULT 0,
+  klas_accepted INTEGER DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Day comments table - stores confirmed day comments
+CREATE TABLE IF NOT EXISTS day_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  comment_date DATE NOT NULL,
+  comment TEXT NOT NULL,
+  author TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(comment_date)
 );
 
 -- Comments table - conversation about the proposal

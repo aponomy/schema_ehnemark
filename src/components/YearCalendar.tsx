@@ -1,7 +1,7 @@
 import { Box, Grid, Typography } from '@mui/joy';
 import { useEffect } from 'react';
 import { calculateStatistics, getMonthsFromDate } from '../api';
-import type { DayInfo, Schedule } from '../types';
+import type { DayComment, DayInfo, Schedule } from '../types';
 import { MonthCalendar } from './MonthCalendar';
 
 interface YearCalendarProps {
@@ -13,6 +13,7 @@ interface YearCalendarProps {
   onDragEnd?: () => void;
   onDrop?: (targetDate: Date, targetDayInfo: DayInfo) => void;
   onStatsCalculated?: (stats: { jenniferPercent: number; klasPercent: number }) => void;
+  dayComments?: DayComment[];
 }
 
 export function YearCalendar({ 
@@ -24,6 +25,7 @@ export function YearCalendar({
   onDragEnd,
   onDrop,
   onStatsCalculated,
+  dayComments = [],
 }: YearCalendarProps) {
   const today = new Date();
   const months = getMonthsFromDate(today, 12); // Current month + 11 = 12 months total
@@ -81,6 +83,7 @@ export function YearCalendar({
                   onDragStart={onDragStart}
                   onDragEnd={onDragEnd}
                   onDrop={onDrop}
+                  dayComments={dayComments}
                 />
               </Grid>
             ))}

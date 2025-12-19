@@ -1,4 +1,4 @@
-import type { DayInfo, Proposal, ProposalComment, Schedule } from './types';
+import type { DayComment, DayInfo, Proposal, ProposalComment, Schedule } from './types';
 
 // Use production API when running local dev server, relative path when deployed
 const API_BASE = import.meta.env.DEV 
@@ -58,7 +58,7 @@ export async function login(username: string, password: string) {
   return data.user;
 }
 
-export async function fetchSchedule(): Promise<Schedule[]> {
+export async function fetchSchedule(): Promise<{ schedule: Schedule[]; dayComments: DayComment[] }> {
   const res = await fetchWithAuth(`${API_BASE}/schedule`);
   const data = await res.json();
   
@@ -66,7 +66,7 @@ export async function fetchSchedule(): Promise<Schedule[]> {
     throw new Error(data.error || 'Failed to fetch schedule');
   }
   
-  return data.schedule;
+  return { schedule: data.schedule, dayComments: data.dayComments || [] };
 }
 
 export async function fetchProposal(): Promise<{ proposal: Proposal | null; comments: ProposalComment[] }> {
@@ -81,9 +81,10 @@ export async function fetchProposal(): Promise<{ proposal: Proposal | null; comm
 }
 
 export async function updateProposal(
-  action: 'create' | 'update_schedule' | 'add_comment' | 'suggest' | 'accept' | 'delete',
+  action: 'create' | 'update_schedule' | 'update_day_comments' | 'add_comment' | 'accept' | 'delete',
   options?: {
     schedule_data?: Array<{ switch_date: string; parent_after: string }>;
+    day_comments?: Array<{ date: string; comment: string; author: string }>;
     comment?: string;
   }
 ) {
@@ -155,7 +156,10 @@ export function getCalendarDays(year: number, month: number): Date[] {
 }
 
 export function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function parseDate(dateStr: string): Date {
